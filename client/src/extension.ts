@@ -1,6 +1,9 @@
 import * as path from 'path';
 import * as net from 'net';
 import { workspace, ExtensionContext } from 'vscode';
+import { Range, URI } from 'vscode-languageserver-types';
+import { ProtocolRequestType } from 'vscode-languageserver-protocol';
+import { HandlerResult, RequestHandler } from 'vscode-jsonrpc';
 
 import {
 	LanguageClient,
@@ -12,6 +15,22 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
+
+interface SendExperimentalParams {
+	message: string;
+	uri: URI;
+}
+
+interface SendExperimentalResult {
+	message: string;
+}
+
+declare namespace SendExperimentalRequest {
+    const method: '$openscad/test';
+    const type: ProtocolRequestType<SendExperimentalParams, SendExperimentalResult, void, void, void>;
+    type HandlerSignature = RequestHandler<SendExperimentalParams, SendExperimentalResult, void>;
+    type MiddlewareSignature = (params: SendExperimentalParams, next: HandlerSignature) => HandlerResult<SendExperimentalResult, void>;
+}
 
 export function activate(context: ExtensionContext) {
     // The server is implemented in node
@@ -78,8 +97,23 @@ export function activate(context: ExtensionContext) {
 
 	console.log("Client has been started");
 
+
+
     // Push the disposable to the context's subscriptions so that the
     // client can be deactivated on extension deactivation
 	context.subscriptions.push(disposable);
 
+/*
+	const test: SendExperimentalParams = {
+		message: "Hello World",
+		uri: "file:///dev/zero",
+	};
+
+	client.onReady().then(() => {
+		console.log("Client is ready, sending message");
+		client.sendRequest(SendExperimentalRequest.type, test).then((e) => {
+			console.log("Got experimental answer", e);
+		});
+	})
+*/
 }
