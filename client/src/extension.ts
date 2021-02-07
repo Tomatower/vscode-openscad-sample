@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as net from 'net';
-import { workspace, ExtensionContext } from 'vscode';
+import { workspace, ExtensionContext, commands, window, OutputChannel } from 'vscode';
 import { Range, URI } from 'vscode-languageserver-types';
 import { ProtocolRequestType } from 'vscode-languageserver-protocol';
 import { HandlerResult, RequestHandler } from 'vscode-jsonrpc';
@@ -11,52 +11,21 @@ import {
 	ServerOptions,
     TransportKind,
     StreamInfo,
-    Trace
+	Trace,
+	RevealOutputChannelOn
 } from 'vscode-languageclient/node';
+import { downloadAndUnzipVSCode } from 'vscode-test';
 
 let client: LanguageClient;
 
-interface SendExperimentalParams {
-	message: string;
-	uri: URI;
-}
-
-interface SendExperimentalResult {
-	message: string;
-}
-
-declare namespace SendExperimentalRequest {
-    const method: '$openscad/test';
-    const type: ProtocolRequestType<SendExperimentalParams, SendExperimentalResult, void, void, void>;
-    type HandlerSignature = RequestHandler<SendExperimentalParams, SendExperimentalResult, void>;
-    type MiddlewareSignature = (params: SendExperimentalParams, next: HandlerSignature) => HandlerResult<SendExperimentalResult, void>;
-}
-
 export function activate(context: ExtensionContext) {
+	const outputChannel: OutputChannel = window.createOutputChannel("OpenSCAD");
     // The server is implemented in node
 	let connectionInfo = {
 		port: 23725, // 0x5cad
 		host: "localhost"
 	};
 
-    /*
-	let serverModule = context.asAbsolutePath(
-		path.join('server', 'out', 'server.js')
-	);
-	// The debug options for the server
-	// --inspect=6009: runs the server in Node's Inspector mode so VS Code can attach to the server for debugging
-	let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
-
-	// If the extension is launched in debug mode then the debug server options are used
-	// Otherwise the run options are used
-	let serverOptions: ServerOptions = {
-		run: { module: serverModule, transport: TransportKind.ipc },
-		debug: {
-			module: serverModule,
-			transport: TransportKind.ipc,
-			options: debugOptions
-		}
-    };*/
 	let serverOptions = () => {
         // Connect to language server via socket
         let socket = net.connect(connectionInfo);
@@ -65,9 +34,10 @@ export function activate(context: ExtensionContext) {
             reader: socket
 		};
 
+		outputChannel.appendLine('[client] Connecting to openscad on port ' + connectionInfo.port);
 		console.log("Opening connection to " + connectionInfo.host + ":" + connectionInfo.port);
 
-        return Promise.resolve(result);
+		return Promise.resolve(result)
     };
 
 
@@ -78,42 +48,44 @@ export function activate(context: ExtensionContext) {
 		synchronize: {
 			// Notify the server about file changes to '.clientrc files contained in the workspace
 			fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
-        },
-        outputChannelName: 'OpenSCAD Language Server',
+		},
+		outputChannel,
+		outputChannelName: 'OpenSCAD',
+		revealOutputChannelOn: RevealOutputChannelOn.Info,
 	};
 
 	// Create the language client and start the client.
 	client = new LanguageClient(
-		'languageServerExample',
-		'Language Server Example',
+		'openscad-lsp',
+		'OpenSCAD Language Server',
 		serverOptions,
 		clientOptions
 	);
-    // enable tracing (.Off, .Messages, Verbose)
+	client.registerProposedFeatures();
+
+	// enable tracing (.Off, .Messages, Verbose)
     client.trace = Trace.Verbose;
 
 	// Start the client. This will also launch the server
-    let disposable = client.start();
+	let disposable = client.start();
 
-	console.log("Client has been started");
+	// Push the disposable to the context's subscriptions so that the
 
-
-
-    // Push the disposable to the context's subscriptions so that the
     // client can be deactivated on extension deactivation
 	context.subscriptions.push(disposable);
 
-/*
-	const test: SendExperimentalParams = {
-		message: "Hello World",
-		uri: "file:///dev/zero",
-	};
+	context.subscriptions.push(
+		commands.registerCommand("openscad.preview", (e) => {
+			outputChannel.appendLine('[client] Preview requested' + window.activeTextEditor.document.uri);
+
+			client.sendRequest("$openscad/preview", {uri: window.activeTextEditor.document.uri.toString() });
+		})
+	);
 
 	client.onReady().then(() => {
-		console.log("Client is ready, sending message");
-		client.sendRequest(SendExperimentalRequest.type, test).then((e) => {
-			console.log("Got experimental answer", e);
-		});
+		outputChannel.appendLine('[client] Connection has been established');
+
+		commands.executeCommand('openscad.preview');
 	})
-*/
+
 }
